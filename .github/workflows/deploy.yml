@@ -10,7 +10,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # Build the image (this also runs ingestion — catches dead doc URLs / broken
       # extraction), then run the smoke tests inside it.
       - name: Build image
@@ -29,7 +29,7 @@ jobs:
       && vars.HF_SPACE != ''
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       # Mirror main to the Hugging Face Space; HF rebuilds the Docker image.
