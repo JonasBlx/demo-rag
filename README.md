@@ -20,6 +20,10 @@ pinned: false
   <img alt="Docker" src="https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white">
 </p>
 
+<p align="center">
+  <img src="docs/demo.png" alt="The demo answering a question, with the retrieved sources shown" width="820">
+</p>
+
 Retrieval-Augmented Generation over the live LangChain documentation: questions are embedded,
 matched against an indexed corpus, and answered by **Claude** using only the retrieved context —
 with the sources cited and every step of the pipeline visible.
@@ -29,9 +33,6 @@ with the sources cited and every step of the pipeline visible.
 **→ [huggingface.co/spaces/JonasBlx/demo-rag](https://huggingface.co/spaces/JonasBlx/demo-rag)**
 
 Try: *“What's the difference between a retriever and a vectorstore?”*
-
-<!-- Tip: drop a screenshot/GIF at docs/demo.png and uncomment:
-![demo](docs/demo.png) -->
 
 ## What it does
 
