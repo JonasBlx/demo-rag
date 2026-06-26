@@ -22,7 +22,11 @@ jobs:
 
   deploy:
     needs: test
-    if: github.ref == 'refs/heads/main'
+    # Deploy from dev (validate live) and main. Skipped until HF_SPACE is set,
+    # so it never fails before you've configured the Space.
+    if: >-
+      (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main')
+      && vars.HF_SPACE != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
