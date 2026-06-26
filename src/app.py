@@ -2,7 +2,8 @@
 
 Demo: everything is visible — answer, retrieved chunks + scores, the exact
 context sent to the model, timings, tokens and estimated cost. Cost/abuse
-guardrails: Haiku model, capped max_tokens, per-session question limit.
+guardrails: Haiku model, capped max_tokens, a per-question length cap, a
+per-visitor monthly quota (by IP), and a global monthly budget guard.
 """
 
 import os
@@ -27,23 +28,53 @@ def resolve_api_key() -> str | None:
     return st.session_state.get("byok") or os.getenv("ANTHROPIC_API_KEY")
 
 
+_MONTH = 30 * 86400  # rolling 30-day window
+
+
 @st.cache_resource
-def _request_log() -> deque:
-    """Process-wide log of accepted shared-key requests — shared across all sessions
-    (one container), so reloading the page doesn't reset the hourly cap."""
+def _global_log() -> deque:
+    """All accepted shared-key request timestamps (budget guard)."""
     return deque()
 
 
-def _rate_limited() -> bool:
-    log = _request_log()
+@st.cache_resource
+def _user_log() -> dict:
+    """client id (IP) -> deque of that visitor's request timestamps."""
+    return {}
+
+
+# In-memory and shared across all sessions in the container. It resets if the
+# container restarts (HF Spaces sleep/redeploy) — the durable cost ceiling is the
+# spend limit you set on the Anthropic console.
+
+
+def _client_id() -> str:
+    """Best-effort visitor id from the proxy's forwarded IP."""
+    try:
+        xff = st.context.headers.get("X-Forwarded-For", "")
+    except Exception:
+        xff = ""
+    return xff.split(",")[0].strip() if xff else "unknown"
+
+
+def _prune(dq: deque, now: float) -> deque:
+    while dq and now - dq[0] > _MONTH:
+        dq.popleft()
+    return dq
+
+
+def _usage(client_id: str) -> tuple[int, int]:
+    """Return (global requests this month, this visitor's requests this month)."""
     now = time.time()
-    while log and now - log[0] > 3600:
-        log.popleft()
-    return len(log) >= config.MAX_REQUESTS_PER_HOUR
+    g = _prune(_global_log(), now)
+    u = _prune(_user_log().setdefault(client_id, deque()), now)
+    return len(g), len(u)
 
 
-def _record_request() -> None:
-    _request_log().append(time.time())
+def _record_request(client_id: str) -> None:
+    now = time.time()
+    _global_log().append(now)
+    _user_log().setdefault(client_id, deque()).append(now)
 
 
 # --- Sidebar: full configuration on display ----------------------------------
@@ -56,10 +87,10 @@ with st.sidebar:
 - **Embeddings**: `{config.EMBEDDING_BACKEND}` · `{config.LOCAL_EMBEDDING_MODEL}`
 - **top-k**: `{config.RETRIEVAL_K}`
 
-**Shared-key limits** (lifted with your own key)
-- **Per session**: `{config.MAX_QUESTIONS_PER_SESSION}` questions
+**Free-tier limits** (lifted with your own key)
+- **Per visitor**: `{config.MAX_REQUESTS_PER_USER_PER_MONTH}` questions / month
 - **Per question**: `{config.MAX_QUESTION_CHARS}` chars max
-- **Per hour (all users)**: `{config.MAX_REQUESTS_PER_HOUR}` requests
+- **Demo budget**: `{config.MAX_REQUESTS_PER_MONTH}` questions / month (all visitors)
 """
     )
     with st.expander("🔑 Use your own API key (optional)"):
@@ -76,7 +107,6 @@ st.caption("RAG grounded in the official docs · sourced answers · fully inspec
 
 # --- Session state -----------------------------------------------------------
 st.session_state.setdefault("messages", [])
-st.session_state.setdefault("count", 0)
 
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
@@ -124,19 +154,21 @@ if not st.session_state.get("byok"):
             "your own API key in the sidebar."
         )
         st.stop()
-    if st.session_state.count >= config.MAX_QUESTIONS_PER_SESSION:
+    global_month, user_month = _usage(_client_id())
+    if global_month >= config.MAX_REQUESTS_PER_MONTH:
         st.warning(
-            f"Per-session limit reached ({config.MAX_QUESTIONS_PER_SESSION} questions). "
-            "Reload the page, or use your own API key."
+            "🙏 This demo's monthly budget has been used up. It refreshes over the "
+            "coming weeks — or use your own API key in the sidebar to continue now."
         )
         st.stop()
-    if _rate_limited():
+    if user_month >= config.MAX_REQUESTS_PER_USER_PER_MONTH:
         st.warning(
-            "The shared demo has hit its hourly request limit. Please try again later, "
-            "or use your own API key in the sidebar."
+            f"You've used your {config.MAX_REQUESTS_PER_USER_PER_MONTH} free questions "
+            "for this month — thanks for trying it! They refresh next month, or use "
+            "your own API key in the sidebar to continue now."
         )
         st.stop()
-    _record_request()
+    _record_request(_client_id())
 
 st.session_state.messages.append({"role": "user", "content": question})
 with st.chat_message("user"):
@@ -160,7 +192,6 @@ with st.chat_message("assistant"):
     answer = reply.content if isinstance(reply.content, str) else str(reply.content)
     st.markdown(answer)
     st.session_state.messages.append({"role": "assistant", "content": answer})
-    st.session_state.count += 1
 
     # --- Everything is inspectable ---
     with st.expander(f"📄 Sources ({len(scored)} chunks)"):
