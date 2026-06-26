@@ -123,10 +123,9 @@ clicked = None
 if not st.session_state.messages:
     with st.chat_message("assistant"):
         st.markdown(
-            "👋 Ask me anything about the **LangChain documentation**. "
-            "I answer only from the docs and cite the sources.\n\n"
-            "ℹ️ The docs are in English — **ask in English for the best results.**\n\n"
-            "**Try one of these:**"
+            "Ask a question about the **LangChain documentation**. Answers come only "
+            "from the docs, with sources cited. The docs are in English, so ask in "
+            "English for the best results.\n\n**Try one of these:**"
         )
         for ex in EXAMPLE_QUESTIONS:
             if st.button(ex, key=f"example::{ex}", use_container_width=True):
@@ -158,8 +157,8 @@ if not st.session_state.get("byok"):
     global_month, user_month = _usage(_client_id())
     if global_month >= config.MAX_REQUESTS_PER_MONTH:
         st.warning(
-            "🙏 This demo's monthly budget has been used up. It refreshes over the "
-            "coming weeks — or use your own API key in the sidebar to continue now."
+            "This demo's monthly budget has been used up. It refreshes next month, "
+            "or use your own API key in the sidebar to continue now."
         )
         st.stop()
     if user_month >= config.MAX_REQUESTS_PER_USER_PER_MONTH:
@@ -200,7 +199,9 @@ with st.chat_message("assistant"):
         for i, (doc, score) in enumerate(scored, 1):
             src = doc.metadata.get("source", "unknown")
             st.markdown(f"**{i}. score {score:.3f}** — [{src}]({src})")
-            st.text(doc.page_content[:400] + ("…" if len(doc.page_content) > 400 else ""))
+            st.text(
+                doc.page_content[:400] + ("…" if len(doc.page_content) > 400 else "")
+            )
 
     with st.expander("🧩 Exact context sent to the model"):
         st.text(context)

@@ -34,7 +34,9 @@ VOYAGE_EMBEDDING_MODEL = os.getenv("VOYAGE_EMBEDDING_MODEL", "voyage-3.5")
 # --- Cost/abuse guardrails (apply only on the shared demo key; BYO key lifts them) ---
 MAX_QUESTION_CHARS = int(os.getenv("MAX_QUESTION_CHARS", "500"))
 # Per-visitor monthly quota (identified by IP) — "everyone gets a turn".
-MAX_REQUESTS_PER_USER_PER_MONTH = int(os.getenv("MAX_REQUESTS_PER_USER_PER_MONTH", "20"))
+MAX_REQUESTS_PER_USER_PER_MONTH = int(
+    os.getenv("MAX_REQUESTS_PER_USER_PER_MONTH", "20")
+)
 # Global monthly budget guard across all visitors (bounds total cost).
 MAX_REQUESTS_PER_MONTH = int(os.getenv("MAX_REQUESTS_PER_MONTH", "500"))
 
