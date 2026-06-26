@@ -1,0 +1,39 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Build the image (this also runs ingestion — catches dead doc URLs / broken
+      # extraction), then run the smoke tests inside it.
+      - name: Build image
+        run: docker build -t demo-rag .
+      - name: Smoke tests
+        run: |
+          docker run --rm -v "$PWD/tests:/home/user/app/tests" demo-rag \
+            sh -c "pip install -q pytest && python -m pytest tests/ -q"
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Mirror main to the Hugging Face Space; HF rebuilds the Docker image.
+      # Requires repo variables HF_USERNAME / HF_SPACE and secret HF_TOKEN.
+      - name: Deploy to Hugging Face Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git push --force \
+            "https://${{ vars.HF_USERNAME }}:${HF_TOKEN}@huggingface.co/spaces/${{ vars.HF_USERNAME }}/${{ vars.HF_SPACE }}" \
+            main:main
