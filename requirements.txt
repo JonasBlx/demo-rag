@@ -1,0 +1,28 @@
+# RAG demo dependencies (modern LangChain split-package layout, 2026).
+# Lower bounds only — after a clean install, lock exact versions with:
+#   pip freeze > requirements.lock.txt
+
+# --- Orchestration (split packages; the umbrella `langchain` isn't needed) ---
+langchain-core>=0.3
+langchain-text-splitters>=0.3   # RecursiveCharacterTextSplitter
+
+# --- LLM: Anthropic Claude (generation) ---
+langchain-anthropic>=0.3
+
+# --- Embeddings: local by default (no API key) ---
+# For the Voyage AI backend instead, add: langchain-voyageai>=0.1
+langchain-huggingface>=0.1
+sentence-transformers>=3.0
+
+# --- Vector store ---
+langchain-chroma>=0.2
+chromadb>=0.5
+
+# --- Web UI ---
+streamlit>=1.40
+
+# --- Doc ingestion: fetch the markdown endpoints ---
+requests>=2.31
+
+# --- Config ---
+python-dotenv>=1.0
