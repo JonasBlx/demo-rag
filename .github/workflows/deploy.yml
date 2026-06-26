@@ -38,6 +38,7 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
+          # Push the checked-out commit (dev or main) to the Space's main branch.
           git push --force \
             "https://${{ vars.HF_USERNAME }}:${HF_TOKEN}@huggingface.co/spaces/${{ vars.HF_USERNAME }}/${{ vars.HF_SPACE }}" \
-            main:main
+            HEAD:main
