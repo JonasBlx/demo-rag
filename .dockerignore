@@ -1,0 +1,17 @@
+.git
+.gitignore
+.venv
+venv
+env
+vectorstore
+data
+__pycache__
+*.pyc
+.env
+.env.*
+docs
+tests
+*.md
+.claude
+.ruff_cache
+.pytest_cache
