@@ -75,10 +75,22 @@ docker run -p 8501:8501 -e ANTHROPIC_API_KEY=sk-... demo-rag
 
 ## Deploy to Hugging Face Spaces
 
-1. Create a Space → **SDK: Docker** (the `Dockerfile` and this README's frontmatter are enough).
-2. Push this repo to the Space (or connect it to GitHub).
-3. In **Settings → Variables and secrets**, add the `ANTHROPIC_API_KEY` secret.
-4. The build runs ingestion and bakes the index in; the app starts on port 8501.
+Deployment is automated via GitHub Actions (`.github/workflows/deploy.yml`): every push runs the
+tests, and a push to `main` mirrors the repo to a Hugging Face Space, which rebuilds the Docker
+image. One-time setup:
+
+1. **Create the Space** — on Hugging Face, *New Space* → **SDK: Docker** (the `Dockerfile` and this
+   README's frontmatter are all it needs).
+2. **Add the runtime secret** — in the Space's *Settings → Variables and secrets*, add
+   `ANTHROPIC_API_KEY` (injected into the container at runtime).
+3. **Wire up auto-deploy** — in the GitHub repo's *Settings → Secrets and variables → Actions*:
+   - secret `HF_TOKEN` — a Hugging Face access token with **write** scope;
+   - variables `HF_USERNAME` (your HF username) and `HF_SPACE` (the Space name).
+4. **Ship it** — merge `dev` → `main`. The workflow pushes to the Space; the build runs ingestion,
+   bakes the index in, and serves the app on port 8501 at your public Space URL.
+
+> Manual alternative (no CI): add the Space as a git remote and `git push` to it, then set the
+> `ANTHROPIC_API_KEY` secret in the Space.
 
 ## Configuration (environment variables)
 
