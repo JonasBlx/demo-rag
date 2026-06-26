@@ -67,7 +67,7 @@ GENERATION  chunks + question → prompt → Claude → answer + sources
 - **Diversified retrieval.** A per-source cap stops one large page from filling every slot and crowding out the relevant ones — while keeping similarity scores for display.
 - **No `temperature` sent to Claude.** Opus 4.7/4.8 reject sampling params (HTTP 400); omitting it keeps a single code path valid across every Claude model.
 - **Index baked into the image.** Ingestion runs at build time, so the container is stateless and starts fast.
-- **Guardrails for a public endpoint.** Cheap model, capped `max_tokens`, per-session limit, and an optional bring-your-own-key field.
+- **Guardrails for a public endpoint.** On the shared key: cheap model, capped `max_tokens`, a per-question length cap, a per-session limit, and a process-wide hourly cap across all visitors — all lifted if a visitor supplies their own key.
 
 ## Run locally
 
@@ -114,7 +114,9 @@ All via environment variables (see [`.env.example`](.env.example)):
 | `MAX_TOKENS` | `1024` | Cap on answer length |
 | `RETRIEVAL_K` | `4` | Chunks retrieved per question |
 | `EMBEDDING_BACKEND` | `local` | `local` or `voyage` |
-| `MAX_QUESTIONS_PER_SESSION` | `20` | Per-session rate limit |
+| `MAX_QUESTIONS_PER_SESSION` | `20` | Questions per browser session |
+| `MAX_QUESTION_CHARS` | `500` | Max characters per question |
+| `MAX_REQUESTS_PER_HOUR` | `100` | Requests/hour across all visitors |
 
 </details>
 
