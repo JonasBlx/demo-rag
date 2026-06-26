@@ -7,6 +7,7 @@ guardrails: Haiku model, capped max_tokens, per-session question limit.
 
 import os
 import time
+from collections import deque
 
 import streamlit as st
 
@@ -26,6 +27,25 @@ def resolve_api_key() -> str | None:
     return st.session_state.get("byok") or os.getenv("ANTHROPIC_API_KEY")
 
 
+@st.cache_resource
+def _request_log() -> deque:
+    """Process-wide log of accepted shared-key requests — shared across all sessions
+    (one container), so reloading the page doesn't reset the hourly cap."""
+    return deque()
+
+
+def _rate_limited() -> bool:
+    log = _request_log()
+    now = time.time()
+    while log and now - log[0] > 3600:
+        log.popleft()
+    return len(log) >= config.MAX_REQUESTS_PER_HOUR
+
+
+def _record_request() -> None:
+    _request_log().append(time.time())
+
+
 # --- Sidebar: full configuration on display ----------------------------------
 with st.sidebar:
     st.header("⚙️ Configuration")
@@ -35,7 +55,11 @@ with st.sidebar:
 - **max_tokens**: `{config.MAX_TOKENS}`
 - **Embeddings**: `{config.EMBEDDING_BACKEND}` · `{config.LOCAL_EMBEDDING_MODEL}`
 - **top-k**: `{config.RETRIEVAL_K}`
-- **Per-session limit**: `{config.MAX_QUESTIONS_PER_SESSION}` questions
+
+**Shared-key limits** (lifted with your own key)
+- **Per session**: `{config.MAX_QUESTIONS_PER_SESSION}` questions
+- **Per question**: `{config.MAX_QUESTION_CHARS}` chars max
+- **Per hour (all users)**: `{config.MAX_REQUESTS_PER_HOUR}` requests
 """
     )
     with st.expander("🔑 Use your own API key (optional)"):
@@ -90,12 +114,29 @@ if not resolve_api_key():
     )
     st.stop()
 
-if st.session_state.count >= config.MAX_QUESTIONS_PER_SESSION and not st.session_state.get("byok"):
-    st.warning(
-        f"Demo limit reached ({config.MAX_QUESTIONS_PER_SESSION} questions). "
-        "Reload the page or use your own API key."
-    )
-    st.stop()
+# Abuse guardrails — enforced only on the shared demo key. Use your own key
+# (sidebar) to lift them.
+if not st.session_state.get("byok"):
+    if len(question) > config.MAX_QUESTION_CHARS:
+        st.warning(
+            f"Question too long ({len(question)} characters; the limit is "
+            f"{config.MAX_QUESTION_CHARS} on the shared demo). Shorten it, or use "
+            "your own API key in the sidebar."
+        )
+        st.stop()
+    if st.session_state.count >= config.MAX_QUESTIONS_PER_SESSION:
+        st.warning(
+            f"Per-session limit reached ({config.MAX_QUESTIONS_PER_SESSION} questions). "
+            "Reload the page, or use your own API key."
+        )
+        st.stop()
+    if _rate_limited():
+        st.warning(
+            "The shared demo has hit its hourly request limit. Please try again later, "
+            "or use your own API key in the sidebar."
+        )
+        st.stop()
+    _record_request()
 
 st.session_state.messages.append({"role": "user", "content": question})
 with st.chat_message("user"):

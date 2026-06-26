@@ -31,8 +31,10 @@ LOCAL_EMBEDDING_MODEL = os.getenv(
 )
 VOYAGE_EMBEDDING_MODEL = os.getenv("VOYAGE_EMBEDDING_MODEL", "voyage-3.5")
 
-# --- Cost/abuse guardrails (demo open to everyone) ---
+# --- Cost/abuse guardrails (apply only on the shared demo key; BYO key lifts them) ---
 MAX_QUESTIONS_PER_SESSION = int(os.getenv("MAX_QUESTIONS_PER_SESSION", "20"))
+MAX_QUESTION_CHARS = int(os.getenv("MAX_QUESTION_CHARS", "500"))
+MAX_REQUESTS_PER_HOUR = int(os.getenv("MAX_REQUESTS_PER_HOUR", "100"))
 
 # Public pricing (USD / 1M tokens) — used only to show an estimated cost.
 PRICING = {
