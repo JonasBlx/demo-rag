@@ -2,11 +2,14 @@
 
 Demo: everything is visible — answer, retrieved chunks + scores, the exact
 context sent to the model, timings, tokens and estimated cost. Cost/abuse
-guardrails: Haiku model, capped max_tokens, per-session question limit.
+guardrails: Haiku model, capped max_tokens, a per-question length cap, a
+per-visitor monthly quota (by IP), and a global monthly budget guard.
 """
 
+import logging
 import os
 import time
+from collections import deque
 
 import streamlit as st
 
@@ -26,6 +29,55 @@ def resolve_api_key() -> str | None:
     return st.session_state.get("byok") or os.getenv("ANTHROPIC_API_KEY")
 
 
+_MONTH = 30 * 86400  # rolling 30-day window
+
+
+@st.cache_resource
+def _global_log() -> deque:
+    """All accepted shared-key request timestamps (budget guard)."""
+    return deque()
+
+
+@st.cache_resource
+def _user_log() -> dict:
+    """client id (IP) -> deque of that visitor's request timestamps."""
+    return {}
+
+
+# In-memory and shared across all sessions in the container. It resets if the
+# container restarts (HF Spaces sleep/redeploy) — the durable cost ceiling is the
+# spend limit you set on the Anthropic console.
+
+
+def _client_id() -> str:
+    """Best-effort visitor id from the proxy's forwarded IP."""
+    try:
+        xff = st.context.headers.get("X-Forwarded-For", "")
+    except Exception:
+        xff = ""
+    return xff.split(",")[0].strip() if xff else "unknown"
+
+
+def _prune(dq: deque, now: float) -> deque:
+    while dq and now - dq[0] > _MONTH:
+        dq.popleft()
+    return dq
+
+
+def _usage(client_id: str) -> tuple[int, int]:
+    """Return (global requests this month, this visitor's requests this month)."""
+    now = time.time()
+    g = _prune(_global_log(), now)
+    u = _prune(_user_log().setdefault(client_id, deque()), now)
+    return len(g), len(u)
+
+
+def _record_request(client_id: str) -> None:
+    now = time.time()
+    _global_log().append(now)
+    _user_log().setdefault(client_id, deque()).append(now)
+
+
 # --- Sidebar: full configuration on display ----------------------------------
 with st.sidebar:
     st.header("⚙️ Configuration")
@@ -35,7 +87,11 @@ with st.sidebar:
 - **max_tokens**: `{config.MAX_TOKENS}`
 - **Embeddings**: `{config.EMBEDDING_BACKEND}` · `{config.LOCAL_EMBEDDING_MODEL}`
 - **top-k**: `{config.RETRIEVAL_K}`
-- **Per-session limit**: `{config.MAX_QUESTIONS_PER_SESSION}` questions
+
+**Free-tier limits** (lifted with your own key)
+- **Per visitor**: `{config.MAX_REQUESTS_PER_USER_PER_MONTH}` questions / month
+- **Per question**: `{config.MAX_QUESTION_CHARS}` chars max
+- **Demo budget**: `{config.MAX_REQUESTS_PER_MONTH}` questions / month (all visitors)
 """
     )
     with st.expander("🔑 Use your own API key (optional)"):
@@ -52,13 +108,31 @@ st.caption("RAG grounded in the official docs · sourced answers · fully inspec
 
 # --- Session state -----------------------------------------------------------
 st.session_state.setdefault("messages", [])
-st.session_state.setdefault("count", 0)
 
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-question = st.chat_input("Ask a question about LangChain…")
+# Landing (first load only): a welcome message with clickable example questions.
+EXAMPLE_QUESTIONS = [
+    "What's the difference between a retriever and a vectorstore?",
+    "How does retrieval work in a RAG pipeline?",
+    "What is a knowledge base in LangChain?",
+]
+clicked = None
+if not st.session_state.messages:
+    with st.chat_message("assistant"):
+        st.markdown(
+            "Ask a question about the **LangChain documentation**. Answers come only "
+            "from the docs, with sources cited. The docs are in English, so ask in "
+            "English for the best results.\n\n**Try one of these:**"
+        )
+        for ex in EXAMPLE_QUESTIONS:
+            if st.button(ex, key=f"example::{ex}", use_container_width=True):
+                clicked = ex
+
+typed = st.chat_input("Ask a question about LangChain… (in English)")
+question = typed or clicked
 if not question:
     st.stop()
 
@@ -70,12 +144,31 @@ if not resolve_api_key():
     )
     st.stop()
 
-if st.session_state.count >= config.MAX_QUESTIONS_PER_SESSION and not st.session_state.get("byok"):
-    st.warning(
-        f"Demo limit reached ({config.MAX_QUESTIONS_PER_SESSION} questions). "
-        "Reload the page or use your own API key."
-    )
-    st.stop()
+# Abuse guardrails — enforced only on the shared demo key. Use your own key
+# (sidebar) to lift them.
+if not st.session_state.get("byok"):
+    if len(question) > config.MAX_QUESTION_CHARS:
+        st.warning(
+            f"Question too long ({len(question)} characters; the limit is "
+            f"{config.MAX_QUESTION_CHARS} on the shared demo). Shorten it, or use "
+            "your own API key in the sidebar."
+        )
+        st.stop()
+    global_month, user_month = _usage(_client_id())
+    if global_month >= config.MAX_REQUESTS_PER_MONTH:
+        st.warning(
+            "This demo's monthly budget has been used up. It refreshes next month, "
+            "or use your own API key in the sidebar to continue now."
+        )
+        st.stop()
+    if user_month >= config.MAX_REQUESTS_PER_USER_PER_MONTH:
+        st.warning(
+            f"You've used your {config.MAX_REQUESTS_PER_USER_PER_MONTH} free questions "
+            "for this month — thanks for trying it! They refresh next month, or use "
+            "your own API key in the sidebar to continue now."
+        )
+        st.stop()
+    _record_request(_client_id())
 
 st.session_state.messages.append({"role": "user", "content": question})
 with st.chat_message("user"):
@@ -92,21 +185,23 @@ with st.chat_message("assistant"):
         with st.spinner("Generating…"):
             reply = generate(llm, question, context)
         t2 = time.perf_counter()
-    except Exception as exc:  # boundary: degrade gracefully
-        st.error(f"Error while answering: {exc}")
+    except Exception:  # boundary: degrade gracefully, don't leak internals
+        logging.exception("RAG pipeline error")  # detail goes to server logs only
+        st.error("Something went wrong while answering. Please try again in a moment.")
         st.stop()
 
     answer = reply.content if isinstance(reply.content, str) else str(reply.content)
     st.markdown(answer)
     st.session_state.messages.append({"role": "assistant", "content": answer})
-    st.session_state.count += 1
 
     # --- Everything is inspectable ---
     with st.expander(f"📄 Sources ({len(scored)} chunks)"):
         for i, (doc, score) in enumerate(scored, 1):
             src = doc.metadata.get("source", "unknown")
             st.markdown(f"**{i}. score {score:.3f}** — [{src}]({src})")
-            st.text(doc.page_content[:400] + ("…" if len(doc.page_content) > 400 else ""))
+            st.text(
+                doc.page_content[:400] + ("…" if len(doc.page_content) > 400 else "")
+            )
 
     with st.expander("🧩 Exact context sent to the model"):
         st.text(context)

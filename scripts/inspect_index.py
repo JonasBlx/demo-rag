@@ -42,8 +42,10 @@ for needle in ("retrieval", "knowledge-base"):
             print(text[:500])
 
 # 3. What the app feeds the model for the query.
-query = sys.argv[1] if len(sys.argv) > 1 else (
-    "What's the difference between a retriever and a vectorstore?"
+query = (
+    sys.argv[1]
+    if len(sys.argv) > 1
+    else ("What's the difference between a retriever and a vectorstore?")
 )
 print(f"\n===== diversified retrieve for: {query!r} =====")
 for doc, score in retrieve(vs, query):
