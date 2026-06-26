@@ -58,7 +58,27 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-question = st.chat_input("Ask a question about LangChain…")
+# Landing (first load only): a welcome message with clickable example questions.
+EXAMPLE_QUESTIONS = [
+    "What's the difference between a retriever and a vectorstore?",
+    "How does retrieval work in a RAG pipeline?",
+    "What is a knowledge base in LangChain?",
+]
+clicked = None
+if not st.session_state.messages:
+    with st.chat_message("assistant"):
+        st.markdown(
+            "👋 Ask me anything about the **LangChain documentation**. "
+            "I answer only from the docs and cite the sources.\n\n"
+            "ℹ️ The docs are in English — **ask in English for the best results.**\n\n"
+            "**Try one of these:**"
+        )
+        for ex in EXAMPLE_QUESTIONS:
+            if st.button(ex, key=f"example::{ex}", use_container_width=True):
+                clicked = ex
+
+typed = st.chat_input("Ask a question about LangChain… (in English)")
+question = typed or clicked
 if not question:
     st.stop()
 
