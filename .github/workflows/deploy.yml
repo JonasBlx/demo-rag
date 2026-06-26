@@ -19,6 +19,12 @@ jobs:
         run: |
           docker run --rm -v "$PWD/tests:/home/user/app/tests" demo-rag \
             sh -c "pip install -q pytest && python -m pytest tests/ -q"
+      # Advisory: surfaces known CVEs in installed deps without blocking deploy.
+      - name: Dependency vulnerability scan
+        continue-on-error: true
+        run: |
+          docker run --rm demo-rag \
+            sh -c "pip install -q pip-audit && pip-audit"
 
   deploy:
     needs: test
