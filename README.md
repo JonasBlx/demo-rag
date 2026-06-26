@@ -1,13 +1,3 @@
----
-title: RAG LangChain Docs
-emoji: 🔗
-colorFrom: indigo
-colorTo: purple
-sdk: docker
-app_port: 8501
-pinned: false
----
-
 <h1 align="center">🔗 Chat with the LangChain Docs</h1>
 
 <p align="center"><em>A grounded, fully-inspectable RAG demo — ask the LangChain documentation in plain English, get answers backed by cited sources.</em></p>
