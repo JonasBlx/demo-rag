@@ -6,6 +6,7 @@ guardrails: Haiku model, capped max_tokens, a per-question length cap, a
 per-visitor monthly quota (by IP), and a global monthly budget guard.
 """
 
+import logging
 import os
 import time
 from collections import deque
@@ -185,8 +186,9 @@ with st.chat_message("assistant"):
         with st.spinner("Generating…"):
             reply = generate(llm, question, context)
         t2 = time.perf_counter()
-    except Exception as exc:  # boundary: degrade gracefully
-        st.error(f"Error while answering: {exc}")
+    except Exception:  # boundary: degrade gracefully, don't leak internals
+        logging.exception("RAG pipeline error")  # detail goes to server logs only
+        st.error("Something went wrong while answering. Please try again in a moment.")
         st.stop()
 
     answer = reply.content if isinstance(reply.content, str) else str(reply.content)
